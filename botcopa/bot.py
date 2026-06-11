@@ -342,12 +342,15 @@ async def informacoes(interaction: discord.Interaction, time: str):
             op_gols   = int(ag) if is_home else int(hg)
             oponente_ = a if is_home else h
             if tm_gols > op_gols:
-                res = "✅ Vitória"
+                res = "✅"
             elif tm_gols == op_gols:
-                res = "🤝 Empate"
+                res = "🤝"
             else:
-                res = "❌ Derrota"
-            linhas.append(f"{res}  vs {flag(oponente_)} **{oponente_}**  `{hg}—{ag}`")
+                res = "❌"
+            if is_home:
+                linhas.append(f"{res} {flag(h)} **{h}** `{hg}—{ag}` {flag(a)} **{a}**")
+            else:
+                linhas.append(f"{res} {flag(a)} **{a}** `{ag}—{hg}` {flag(h)} **{h}**")
 
         embed.add_field(
             name="📋 Últimos Resultados na Copa",
