@@ -457,6 +457,53 @@ async def proximosjogos(interaction: discord.Interaction):
     await interaction.followup.send(embed=embed)
 
 
+# ─── /noticias ───────────────────────────────────────────────────────────────
+
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@app_commands.allowed_installs(guilds=True, users=True)
+@tree.command(name="noticias", description="Últimas notícias da Copa do Mundo 2026")
+async def noticias(interaction: discord.Interaction):
+    await interaction.response.defer()
+
+    data = await espn_get("https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/news")
+    articles = data.get("articles", [])
+
+    if not articles:
+        await interaction.followup.send("📰 Nenhuma notícia disponível no momento.")
+        return
+
+    embed = discord.Embed(
+        title="📰 Últimas Notícias — Copa do Mundo 2026",
+        color=0x1565C0,
+    )
+
+    for article in articles[:8]:
+        title    = article.get("headline", "Sem título")
+        desc     = article.get("description", "")
+        link     = article.get("links", {}).get("web", {}).get("href", "")
+        published = article.get("published", "")
+
+        # Formata data
+        try:
+            dt = datetime.fromisoformat(published.replace("Z", "+00:00")).astimezone(BRT)
+            data_fmt = dt.strftime("%d/%m %H:%M")
+        except:
+            data_fmt = ""
+
+        value = ""
+        if desc:
+            value += f"{desc[:100]}{'...' if len(desc) > 100 else ''}\n"
+        if data_fmt:
+            value += f"🕐 {data_fmt}"
+        if link:
+            value += f"  •  [Ler mais]({link})"
+
+        embed.add_field(name=f"📌 {title}", value=value or "—", inline=False)
+
+    embed.set_footer(text="Copa do Mundo 2026 • Fonte: ESPN")
+    await interaction.followup.send(embed=embed)
+
+
 # ─── /comandos ───────────────────────────────────────────────────────────────
 
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -499,6 +546,11 @@ async def comandos(interaction: discord.Interaction):
             "🏆  /classificacao",
             "Tabela de classificação por grupos. Filtre por grupo se quiser.",
             "`/classificacao` — todos os grupos\n`/classificacao grupo:A` — só o Grupo A",
+        ),
+        (
+            "📰  /noticias",
+            "Últimas notícias da Copa do Mundo 2026.",
+            "`/noticias`",
         ),
         (
             "📖  /comandos",
