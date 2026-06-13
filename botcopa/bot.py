@@ -30,8 +30,9 @@ async def espn_get(url: str, params: dict = {}) -> dict:
     return r.json()
 
 async def get_all_events() -> list:
-    """Busca todos os jogos da Copa (scoreboard geral sem data)."""
-    data = await espn_get(BASE_URL)
+    """Busca todos os jogos da Copa do Mundo 2026 (11/06 a 19/07)."""
+    params = {"dates": "20260611-20260719", "limit": 100}
+    data = await espn_get(BASE_URL, params)
     return data.get("events", [])
 
 async def find_next_event(team_name: str):
