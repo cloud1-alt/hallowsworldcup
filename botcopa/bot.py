@@ -24,19 +24,6 @@ intents.reactions = True
 bot  = discord.Client(intents=intents)
 tree = app_commands.CommandTree(bot)
 
-# Cache: message_id -> (nome do time, timestamp de expiração)
-REACTION_TEAM_CACHE: dict[int, tuple[str, float]] = {}
-REACTION_TIMEOUT = 300  # 5 minutos
-
-async def expire_reaction(msg: discord.Message):
-    """Remove a reação ℹ️ e o cache após o tempo limite."""
-    await asyncio.sleep(REACTION_TIMEOUT)
-    REACTION_TEAM_CACHE.pop(msg.id, None)
-    try:
-        await msg.clear_reaction("ℹ️")
-    except Exception:
-        pass
-
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async def espn_get(url: str, params: dict = {}) -> dict:
@@ -231,9 +218,6 @@ async def proximojogo(interaction: discord.Interaction, time: str):
     city    = venue.get("address", {}).get("city", "—")
     note    = (comp.get("notes") or [{}])[0].get("headline", "Fase de Grupos")
 
-    tl = time.lower()
-    time_buscado = home if tl in home.lower() else away
-
     embed = discord.Embed(
         title=f"📅 Próximo Jogo — {flag(home)} {home}",
         color=0x1565C0,
@@ -246,15 +230,9 @@ async def proximojogo(interaction: discord.Interaction, time: str):
     embed.add_field(name="🗓️ Data e Hora", value=date,    inline=True)
     embed.add_field(name="🏆 Fase",        value=note,    inline=True)
     embed.add_field(name="🏟️ Estádio",    value=f"{stadium}, {city}", inline=False)
-    embed.set_footer(text=f"Clique em ℹ️ para ver informações de {time_buscado} • Copa do Mundo 2026")
+    embed.set_footer(text="Use /informacoes para ver estatísticas • Copa do Mundo 2026")
 
-    msg = await interaction.followup.send(embed=embed)
-    try:
-        await msg.add_reaction("ℹ️")
-        REACTION_TEAM_CACHE[msg.id] = (time_buscado, asyncio.get_event_loop().time() + REACTION_TIMEOUT)
-        asyncio.create_task(expire_reaction(msg))
-    except Exception:
-        pass
+    await interaction.followup.send(embed=embed)
 
 
 # ─── /placar ──────────────────────────────────────────────────────────────────
@@ -764,38 +742,6 @@ async def on_ready():
     print(f"✅ Bot conectado como {bot.user}")
     print(f"📡 Slash commands globais: {[c.name for c in synced]}")
 
-
-@bot.event
-async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
-    if payload.user_id == bot.user.id:
-        return
-    if str(payload.emoji) != "ℹ️":
-        return
-
-    entry = REACTION_TEAM_CACHE.get(payload.message_id)
-    if not entry:
-        return
-
-    team_name, expires_at = entry
-    channel = bot.get_channel(payload.channel_id) or await bot.fetch_channel(payload.channel_id)
-
-    if asyncio.get_event_loop().time() > expires_at:
-        # Expirou — remove do cache e avisa
-        REACTION_TEAM_CACHE.pop(payload.message_id, None)
-        try:
-            msg = await channel.fetch_message(payload.message_id)
-            await msg.clear_reaction("ℹ️")
-        except Exception:
-            pass
-        await channel.send("⏱️ Tempo para interagir com este botão expirou. Use `/proximojogo` novamente.")
-        return
-
-    embed, erro = await build_informacoes_embed(team_name)
-    if erro:
-        await channel.send(erro)
-        return
-
-    await channel.send(embed=embed)
 
 
 bot.run(DISCORD_TOKEN)
