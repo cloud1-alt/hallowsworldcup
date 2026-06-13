@@ -84,6 +84,57 @@ POSITIONS_PT = {
     "GK": "Goleiro", "DF": "Defensor", "MF": "Meio-campo", "FW": "Atacante",
 }
 
+# Abreviações/siglas comuns -> nome usado pela ESPN
+TEAM_ABBR = {
+    "br": "brazil", "bra": "brazil",
+    "ar": "argentina", "arg": "argentina",
+    "fr": "france", "fra": "france",
+    "de": "germany", "ger": "germany", "ale": "germany",
+    "es": "spain", "esp": "spain",
+    "en": "england", "eng": "england",
+    "pt": "portugal", "por": "portugal",
+    "nl": "netherlands", "ned": "netherlands", "hol": "netherlands",
+    "it": "italy", "ita": "italy",
+    "uy": "uruguay", "uru": "uruguay",
+    "mx": "mexico", "mex": "mexico",
+    "us": "united states", "usa": "united states",
+    "jp": "japan", "jpn": "japan",
+    "ma": "morocco", "mar": "morocco",
+    "hr": "croatia", "cro": "croatia",
+    "rs": "serbia", "srb": "serbia",
+    "ch": "switzerland", "sui": "switzerland", "swi": "switzerland",
+    "sn": "senegal", "sen": "senegal",
+    "au": "australia", "aus": "australia",
+    "ir": "iran", "irn": "iran",
+    "kr": "south korea", "kor": "south korea",
+    "gh": "ghana", "gha": "ghana",
+    "cm": "cameroon", "cmr": "cameroon",
+    "ca": "canada", "can": "canada",
+    "ec": "ecuador", "ecu": "ecuador",
+    "qa": "qatar", "qat": "qatar",
+    "sa": "saudi arabia", "ksa": "saudi arabia",
+    "tn": "tunisia", "tun": "tunisia",
+    "co": "colombia", "col": "colombia",
+    "cl": "chile", "chi": "chile",
+    "pe": "peru", "per": "peru",
+    "ve": "venezuela", "ven": "venezuela",
+    "pl": "poland", "pol": "poland",
+    "dk": "denmark", "den": "denmark",
+    "be": "belgium", "bel": "belgium",
+    "wls": "wales", "wal": "wales",
+    "cr": "costa rica", "crc": "costa rica",
+    "nz": "new zealand",
+    "za": "south africa", "rsa": "south africa",
+    "cz": "czechia", "cze": "czechia",
+    "py": "paraguay", "par": "paraguay",
+    "ba": "bosnia and herzegovina", "bih": "bosnia and herzegovina",
+}
+
+def normalize_team(time: str) -> str:
+    """Converte abreviações/siglas (BR, USA, GER...) para o nome usado pela ESPN."""
+    key = time.strip().lower()
+    return TEAM_ABBR.get(key, time)
+
 def flag(country: str) -> str:
     return FLAGS.get(country, "🏳️")
 
@@ -157,10 +208,11 @@ async def jogoshoje(interaction: discord.Interaction):
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
 @tree.command(name="proximojogo", description="Próximo jogo de um time na Copa do Mundo 2026")
-@app_commands.describe(time="Nome do time em inglês. Ex: Brazil, France, Mexico")
+@app_commands.describe(time="Nome ou sigla do time. Ex: Brazil, BR, France, FR, USA")
 async def proximojogo(interaction: discord.Interaction, time: str):
     await interaction.response.defer()
 
+    time = normalize_team(time)
     event = await find_next_event(time)
 
     if not event:
@@ -210,7 +262,7 @@ async def proximojogo(interaction: discord.Interaction, time: str):
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
 @tree.command(name="placar", description="Placares ao vivo ou de um time específico")
-@app_commands.describe(time="Nome do time (opcional). Ex: Brazil, France")
+@app_commands.describe(time="Nome ou sigla do time (opcional). Ex: Brazil, BR, USA")
 async def placar(interaction: discord.Interaction, time: str = None):
     await interaction.response.defer()
 
@@ -218,6 +270,7 @@ async def placar(interaction: discord.Interaction, time: str = None):
     live   = [e for e in events if e["status"]["type"]["state"] == "in"]
 
     if time:
+        time = normalize_team(time)
         tl   = time.lower()
         live = [
             e for e in events
@@ -254,6 +307,7 @@ async def placar(interaction: discord.Interaction, time: str = None):
 
 async def build_informacoes_embed(time: str):
     """Retorna (embed, None) ou (None, mensagem_de_erro)."""
+    time = normalize_team(time)
     tl = time.lower()
 
     # 1. Localiza o time e o grupo via standings
@@ -280,25 +334,46 @@ async def build_informacoes_embed(time: str):
     except Exception:
         pass
 
-    if stats_time is None:
-        return None, (
-            f"❌ Time **{time}** não encontrado na Copa do Mundo 2026.\n"
-            f"💡 Use o nome em inglês. Ex: `Brazil`, `France`, `United States`"
-        )
-
-    # 2. Resultados na Copa (para calcular aproveitamento e jogos restantes)
+    # 2. Resultados na Copa (sempre busca, serve tanto pro fallback quanto pro normal)
     all_events = await get_all_events()
     jogados, restantes = 0, 0
+    venceu = empatou = perdeu = gols_pro = gols_contra = 0
+    encontrou_time = False
+
     for e in all_events:
         comp = e["competitions"][0]
         h = comp["competitors"][0]["team"]["displayName"]
         a = comp["competitors"][1]["team"]["displayName"]
         if tl not in h.lower() and tl not in a.lower():
             continue
+
+        encontrou_time = True
+        if team_name == time:  # ainda não confirmado pelos standings
+            team_name = h if tl in h.lower() else a
+
         if e["status"]["type"]["state"] == "post":
             jogados += 1
+            hg = int(comp["competitors"][0].get("score") or 0)
+            ag = int(comp["competitors"][1].get("score") or 0)
+            is_home = tl in h.lower()
+            tg = hg if is_home else ag
+            og = ag if is_home else hg
+            gols_pro    += tg
+            gols_contra += og
+            if tg > og:
+                venceu += 1
+            elif tg == og:
+                empatou += 1
+            else:
+                perdeu += 1
         elif e["status"]["type"]["state"] == "pre":
             restantes += 1
+
+    if stats_time is None and not encontrou_time:
+        return None, (
+            f"❌ Time **{time}** não encontrado na Copa do Mundo 2026.\n"
+            f"💡 Use o nome em inglês. Ex: `Brazil`, `France`, `United States`"
+        )
 
     # 3. Monta embed
     embed = discord.Embed(
@@ -306,48 +381,75 @@ async def build_informacoes_embed(time: str):
         color=0x004D40,
     )
 
-    pts    = stats_time.get("points", "0")
-    played = stats_time.get("gamesPlayed", "0")
-    won    = stats_time.get("wins", "0")
-    drawn  = stats_time.get("ties", "0")
-    lost   = stats_time.get("losses", "0")
-    gf     = stats_time.get("pointsFor", stats_time.get("goalsFor", "0"))
-    gc     = stats_time.get("pointsAgainst", stats_time.get("goalsAgainst", "0"))
-    gd     = stats_time.get("pointDifferential", "0")
-    classif = "✅ Classificado para próxima fase" if posicao_grupo and posicao_grupo <= 2 else "⏳ Em disputa de classificação"
+    if stats_time is not None:
+        # Caminho normal: dados completos via standings
+        pts    = stats_time.get("points", "0")
+        played = stats_time.get("gamesPlayed", "0")
+        won    = stats_time.get("wins", "0")
+        drawn  = stats_time.get("ties", "0")
+        lost   = stats_time.get("losses", "0")
+        gf     = stats_time.get("pointsFor", stats_time.get("goalsFor", "0"))
+        gc     = stats_time.get("pointsAgainst", stats_time.get("goalsAgainst", "0"))
+        gd     = stats_time.get("pointDifferential", "0")
+        classif = "✅ Classificado para próxima fase" if posicao_grupo and posicao_grupo <= 2 else "⏳ Em disputa de classificação"
 
-    # Aproveitamento
-    try:
-        aproveitamento = round((int(won) * 3 + int(drawn)) / (int(played) * 3) * 100) if int(played) > 0 else 0
-    except Exception:
-        aproveitamento = 0
-
-    embed.add_field(
-        name=f"📊 {grupo_nome} — {posicao_grupo}º lugar",
-        value=(
-            f"**{pts} pts**  •  {classif}\n"
-            f"🎮 {played} jogos  ✅ {won}v  🤝 {drawn}e  ❌ {lost}d\n"
-            f"⚽ Gols: {gf} pró / {gc} contra  •  Saldo {gd}\n"
-            f"📈 Aproveitamento: {aproveitamento}%"
-        ),
-        inline=False,
-    )
-
-    # Tabela completa do grupo
-    if grupo_completo:
-        linhas = []
-        for i, entry in enumerate(grupo_completo, 1):
-            nome = entry["team"]["displayName"]
-            s    = {st["name"]: st["displayValue"] for st in entry.get("stats", [])}
-            p    = s.get("points", "0")
-            marcador = "👉 " if tl in nome.lower() else "   "
-            linhas.append(f"{marcador}`{i}.` {flag(nome)} **{nome}** — {p} pts")
+        try:
+            aproveitamento = round((int(won) * 3 + int(drawn)) / (int(played) * 3) * 100) if int(played) > 0 else 0
+        except Exception:
+            aproveitamento = 0
 
         embed.add_field(
-            name=f"📌 Tabela do {grupo_nome}",
-            value="\n".join(linhas),
+            name=f"📊 {grupo_nome} — {posicao_grupo}º lugar",
+            value=(
+                f"**{pts} pts**  •  {classif}\n"
+                f"🎮 {played} jogos  ✅ {won}v  🤝 {drawn}e  ❌ {lost}d\n"
+                f"⚽ Gols: {gf} pró / {gc} contra  •  Saldo {gd}\n"
+                f"📈 Aproveitamento: {aproveitamento}%"
+            ),
             inline=False,
         )
+
+        # Tabela completa do grupo
+        if grupo_completo:
+            linhas = []
+            for i, entry in enumerate(grupo_completo, 1):
+                nome = entry["team"]["displayName"]
+                s    = {st["name"]: st["displayValue"] for st in entry.get("stats", [])}
+                p    = s.get("points", "0")
+                marcador = "👉 " if tl in nome.lower() else "   "
+                linhas.append(f"{marcador}`{i}.` {flag(nome)} **{nome}** — {p} pts")
+
+            embed.add_field(
+                name=f"📌 Tabela do {grupo_nome}",
+                value="\n".join(linhas),
+                inline=False,
+            )
+    else:
+        # Fallback: classificação ainda não disponível, usa dados calculados dos jogos
+        gd = gols_pro - gols_contra
+        pts = venceu * 3 + empatou
+        try:
+            aproveitamento = round((venceu * 3 + empatou) / (jogados * 3) * 100) if jogados > 0 else 0
+        except Exception:
+            aproveitamento = 0
+
+        if jogados == 0:
+            embed.add_field(
+                name="📊 Desempenho na Copa",
+                value="⏳ Time ainda não disputou jogos. Classificação será exibida após o início da fase de grupos do time.",
+                inline=False,
+            )
+        else:
+            embed.add_field(
+                name="📊 Desempenho na Copa",
+                value=(
+                    f"**{pts} pts**  •  ⏳ Classificação do grupo ainda não disponível\n"
+                    f"🎮 {jogados} jogo(s)  ✅ {venceu}v  🤝 {empatou}e  ❌ {perdeu}d\n"
+                    f"⚽ Gols: {gols_pro} pró / {gols_contra} contra  •  Saldo {gd:+}\n"
+                    f"📈 Aproveitamento: {aproveitamento}%"
+                ),
+                inline=False,
+            )
 
     # Jogos na Copa
     embed.add_field(
@@ -363,7 +465,7 @@ async def build_informacoes_embed(time: str):
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
 @tree.command(name="informacoes", description="Estatísticas e desempenho de um time na Copa 2026")
-@app_commands.describe(time="Nome do time em inglês. Ex: Brazil, France, Mexico")
+@app_commands.describe(time="Nome ou sigla do time. Ex: Brazil, BR, France, FR, USA")
 async def informacoes(interaction: discord.Interaction, time: str):
     await interaction.response.defer()
 
@@ -469,10 +571,11 @@ async def proximosjogos(interaction: discord.Interaction):
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
 @tree.command(name="historico", description="Últimos jogos disputados por um time na Copa 2026")
-@app_commands.describe(time="Nome do time em inglês. Ex: Brazil, France, Mexico")
+@app_commands.describe(time="Nome ou sigla do time. Ex: Brazil, BR, France, FR, USA")
 async def historico(interaction: discord.Interaction, time: str):
     await interaction.response.defer()
 
+    time = normalize_team(time)
     tl = time.lower()
     all_events = await get_all_events()
 
