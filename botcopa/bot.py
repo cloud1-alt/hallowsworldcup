@@ -457,6 +457,73 @@ async def proximosjogos(interaction: discord.Interaction):
     await interaction.followup.send(embed=embed)
 
 
+# ─── /historico ──────────────────────────────────────────────────────────────
+
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@app_commands.allowed_installs(guilds=True, users=True)
+@tree.command(name="historico", description="Últimos jogos disputados por um time na Copa 2026")
+@app_commands.describe(time="Nome do time em inglês. Ex: Brazil, France, Mexico")
+async def historico(interaction: discord.Interaction, time: str):
+    await interaction.response.defer()
+
+    tl = time.lower()
+    all_events = await get_all_events()
+
+    resultados = []
+    for e in all_events:
+        if e["status"]["type"]["state"] != "post":
+            continue
+        comp = e["competitions"][0]
+        h = comp["competitors"][0]["team"]["displayName"]
+        a = comp["competitors"][1]["team"]["displayName"]
+        if tl not in h.lower() and tl not in a.lower():
+            continue
+
+        hg = comp["competitors"][0].get("score", "0")
+        ag = comp["competitors"][1].get("score", "0")
+        date = fmt_date(e["date"])
+        note = (comp.get("notes") or [{}])[0].get("headline", "Fase de Grupos")
+        resultados.append((h, a, hg, ag, date, note))
+
+    if not resultados:
+        await interaction.followup.send(
+            f"📋 **{time}** ainda não disputou nenhum jogo na Copa do Mundo 2026."
+        )
+        return
+
+    embed = discord.Embed(
+        title=f"📋 Histórico — {flag(time)} {time}",
+        description="Copa do Mundo 2026",
+        color=0x37474F,
+    )
+
+    for h, a, hg, ag, date, note in resultados:
+        is_home = tl in h.lower()
+        tm_gols = int(hg) if is_home else int(ag)
+        op_gols = int(ag) if is_home else int(hg)
+
+        if tm_gols > op_gols:
+            res = "✅"
+        elif tm_gols == op_gols:
+            res = "🤝"
+        else:
+            res = "❌"
+
+        if is_home:
+            confronto = f"{flag(h)} **{h}** `{hg}—{ag}` {flag(a)} **{a}**"
+        else:
+            confronto = f"{flag(a)} **{a}** `{ag}—{hg}` {flag(h)} **{h}**"
+
+        embed.add_field(
+            name=f"{res} {confronto}",
+            value=f"🗓️ {date}  •  {note}",
+            inline=False,
+        )
+
+    embed.set_footer(text="Copa do Mundo 2026 • Dados via ESPN")
+    await interaction.followup.send(embed=embed)
+
+
 # ─── /noticias ───────────────────────────────────────────────────────────────
 
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -546,6 +613,11 @@ async def comandos(interaction: discord.Interaction):
             "🏆  /classificacao",
             "Tabela de classificação por grupos. Filtre por grupo se quiser.",
             "`/classificacao` — todos os grupos\n`/classificacao grupo:A` — só o Grupo A",
+        ),
+        (
+            "📋  /historico",
+            "Lista os jogos já disputados por um time na Copa.",
+            "`/historico time:Brazil`",
         ),
         (
             "📰  /noticias",
