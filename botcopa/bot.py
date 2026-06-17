@@ -227,35 +227,55 @@ async def placar(interaction: discord.Interaction, time: str = None):
     await interaction.response.defer()
 
     events = await get_all_events()
-    live   = [e for e in events if e["status"]["type"]["state"] == "in"]
 
     if time:
-        tl   = time.lower()
-        live = [
+        tl    = time.lower()
+        jogos = [
             e for e in events
             if tl in e["competitions"][0]["competitors"][0]["team"]["displayName"].lower()
             or tl in e["competitions"][0]["competitors"][1]["team"]["displayName"].lower()
         ]
+    else:
+        jogos = [e for e in events if e["status"]["type"]["state"] == "in"]
 
-    if not live:
+    if not jogos:
         msg = f"⏸️ **{time}** não está jogando agora." if time else "⏸️ Nenhum jogo ao vivo agora."
         await interaction.followup.send(msg)
         return
 
-    embed = discord.Embed(title="🔴 Ao Vivo — Copa do Mundo 2026", color=0xCC0000)
+    # Título e cor dependem do estado real dos jogos encontrados, não fica fixo em "Ao Vivo"
+    estados = {e["status"]["type"]["state"] for e in jogos}
+    if "in" in estados:
+        titulo, cor = "🔴 Ao Vivo — Copa do Mundo 2026", 0xCC0000
+    elif estados == {"post"}:
+        titulo, cor = "✅ Resultado — Copa do Mundo 2026", 0x2E7D32
+    elif estados == {"pre"}:
+        titulo, cor = "🕐 Próximo Jogo — Copa do Mundo 2026", 0x1565C0
+    else:
+        titulo, cor = "📊 Jogos — Copa do Mundo 2026", 0x37474F
 
-    for event in live:
-        comp       = event["competitions"][0]
-        home       = comp["competitors"][0]["team"]["displayName"]
-        away       = comp["competitors"][1]["team"]["displayName"]
-        home_score = comp["competitors"][0].get("score", "0")
-        away_score = comp["competitors"][1].get("score", "0")
-        clock      = event["status"].get("displayClock", "")
-        status     = event["status"]["type"]["description"]
+    embed = discord.Embed(title=titulo, color=cor)
+
+    for event in jogos:
+        comp        = event["competitions"][0]
+        home        = comp["competitors"][0]["team"]["displayName"]
+        away        = comp["competitors"][1]["team"]["displayName"]
+        status_type = event["status"]["type"]
+        estado      = status_type["state"]
+
+        if estado == "pre":
+            valor = f"🕐 {fmt_date(event['date'])}"
+        else:
+            home_score = comp["competitors"][0].get("score", "0")
+            away_score = comp["competitors"][1].get("score", "0")
+            clock      = event["status"].get("displayClock", "")
+            descricao  = status_type["description"]
+            prefixo    = "🔴 " if estado == "in" else ""
+            valor      = f"{prefixo}**{home_score} — {away_score}**  •  ⏱️ {clock} ({descricao})"
 
         embed.add_field(
             name=f"{flag(home)} {home} vs {away} {flag(away)}",
-            value=f"**{home_score} — {away_score}**  •  ⏱️ {clock} ({status})",
+            value=valor,
             inline=False,
         )
 
