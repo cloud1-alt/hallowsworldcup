@@ -89,9 +89,14 @@ def format_goals(comp: dict) -> str | None:
     if not details:
         return None
 
-    home_id   = comp["competitors"][0]["team"]["id"]
-    home_name = comp["competitors"][0]["team"]["displayName"]
-    away_name = comp["competitors"][1]["team"]["displayName"]
+    home_team = comp["competitors"][0]["team"]
+    away_team = comp["competitors"][1]["team"]
+    home_id   = home_team["id"]
+    home_name = home_team["displayName"]
+    away_name = away_team["displayName"]
+    # Sigla vem direto da ESPN, então funciona mesmo pra times fora do dict FLAGS
+    home_abbr = home_team.get("abbreviation") or home_name[:3].upper()
+    away_abbr = away_team.get("abbreviation") or away_name[:3].upper()
 
     gols_evt = [d for d in details if d.get("scoringPlay")]
     if not gols_evt:
@@ -102,12 +107,14 @@ def format_goals(comp: dict) -> str | None:
     linhas = []
     for d in gols_evt:
         minuto    = d.get("clock", {}).get("displayValue", "")
-        time_nome = home_name if d.get("team", {}).get("id") == home_id else away_name
+        is_home   = d.get("team", {}).get("id") == home_id
+        time_nome = home_name if is_home else away_name
+        abbr      = home_abbr if is_home else away_abbr
         jogadores = d.get("athletesInvolved") or [{}]
         nome      = jogadores[0].get("shortName") or jogadores[0].get("displayName", "Gol")
         sufixo    = " (contra)" if d.get("ownGoal") else ""
         sufixo   += " (pen.)" if d.get("penaltyKick") else ""
-        linhas.append(f"{flag(time_nome)} {nome}{sufixo} {minuto}")
+        linhas.append(f"{flag(time_nome)} **{abbr}** {nome}{sufixo} {minuto}")
 
     return "\n".join(linhas)
 
