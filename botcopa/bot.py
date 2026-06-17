@@ -476,6 +476,50 @@ async def proximosjogos(interaction: discord.Interaction):
     await interaction.followup.send(embed=embed)
 
 
+# ─── /historico ───────────────────────────────────────────────────────────────
+
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@app_commands.allowed_installs(guilds=True, users=True)
+@tree.command(name="historico", description="Jogos e gols de ontem na Copa do Mundo 2026")
+async def historico(interaction: discord.Interaction):
+    await interaction.response.defer()
+
+    ontem  = (datetime.now(BRT) - timedelta(days=1)).strftime("%Y%m%d")
+    data   = await espn_get(BASE_URL, {"dates": ontem})
+    events = data.get("events", [])
+
+    if not events:
+        await interaction.followup.send("📅 Nenhum jogo da Copa do Mundo ontem.")
+        return
+
+    data_fmt = (datetime.now(BRT) - timedelta(days=1)).strftime("%d/%m/%Y")
+    embed = discord.Embed(
+        title=f"📜 Histórico — Jogos de Ontem ({data_fmt})",
+        color=0x4A148C,
+    )
+
+    for event in events:
+        comp        = event["competitions"][0]
+        home        = comp["competitors"][0]["team"]["displayName"]
+        away        = comp["competitors"][1]["team"]["displayName"]
+        home_score  = comp["competitors"][0].get("score", "0")
+        away_score  = comp["competitors"][1].get("score", "0")
+        status_desc = event["status"]["type"]["description"]
+
+        embed.add_field(
+            name=f"{flag(home)} {home} vs {away} {flag(away)}",
+            value=f"**{home_score} — {away_score}**  •  {status_desc}",
+            inline=False,
+        )
+
+        gols = format_goals(comp)
+        if gols:
+            embed.add_field(name="⚽ Gols", value=gols, inline=False)
+
+    embed.set_footer(text="Copa do Mundo 2026 • Horário de Brasília")
+    await interaction.followup.send(embed=embed)
+
+
 # ─── /comandos ───────────────────────────────────────────────────────────────
 
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -508,6 +552,11 @@ async def comandos(interaction: discord.Interaction):
             "⏭️  /proximojogo",
             "Próximo jogo de um time específico na Copa.",
             "`/proximojogo time:Brazil`",
+        ),
+        (
+            "📜  /historico",
+            "Jogos e gols que aconteceram ontem.",
+            "`/historico`",
         ),
         (
             "🧬  /informacoes",
