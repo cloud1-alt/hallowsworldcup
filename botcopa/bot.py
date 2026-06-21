@@ -68,6 +68,72 @@ POSITIONS_PT = {
     "GK": "Goleiro", "DF": "Defensor", "MF": "Meio-campo", "FW": "Atacante",
 }
 
+# Tradução PT-BR -> inglês (nomes usados pela ESPN) para os times da Copa 2026.
+# Chaves já normalizadas (sem acento, minúsculo) — veja normalize().
+TEAM_PT_EN = {
+    "brasil": "Brazil",
+    "argentina": "Argentina",
+    "franca": "France",
+    "alemanha": "Germany",
+    "espanha": "Spain",
+    "inglaterra": "England",
+    "portugal": "Portugal",
+    "holanda": "Netherlands",
+    "paises baixos": "Netherlands",
+    "italia": "Italy",
+    "uruguai": "Uruguay",
+    "mexico": "Mexico",
+    "estados unidos": "United States",
+    "eua": "United States",
+    "japao": "Japan",
+    "marrocos": "Morocco",
+    "croacia": "Croatia",
+    "servia": "Serbia",
+    "suica": "Switzerland",
+    "senegal": "Senegal",
+    "australia": "Australia",
+    "ira": "Iran",
+    "coreia do sul": "South Korea",
+    "gana": "Ghana",
+    "camaroes": "Cameroon",
+    "canada": "Canada",
+    "equador": "Ecuador",
+    "catar": "Qatar",
+    "arabia saudita": "Saudi Arabia",
+    "tunisia": "Tunisia",
+    "colombia": "Colombia",
+    "chile": "Chile",
+    "peru": "Peru",
+    "venezuela": "Venezuela",
+    "polonia": "Poland",
+    "dinamarca": "Denmark",
+    "belgica": "Belgium",
+    "pais de gales": "Wales",
+    "gales": "Wales",
+    "costa rica": "Costa Rica",
+    "nova zelandia": "New Zealand",
+    "africa do sul": "South Africa",
+    "republica tcheca": "Czech Republic",
+    "tchequia": "Czech Republic",
+    "paraguai": "Paraguay",
+    "bosnia": "Bosnia and Herzegovina",
+    "bosnia e herzegovina": "Bosnia and Herzegovina",
+}
+
+def normalize(text: str) -> str:
+    """Remove acentos e baixa a caixa, p/ comparações tolerantes a digitação."""
+    import unicodedata
+    nfkd = unicodedata.normalize("NFKD", text)
+    sem_acento = "".join(c for c in nfkd if not unicodedata.combining(c))
+    return sem_acento.lower().strip()
+
+def translate_team(team_name: str) -> str:
+    """Traduz um nome de time em PT-BR (com ou sem acento) para o nome em
+    inglês usado pela ESPN. Se não encontrar no dicionário, devolve o nome
+    original sem alterações (fallback: busca direto como antes)."""
+    chave = normalize(team_name)
+    return TEAM_PT_EN.get(chave, team_name)
+
 def flag(country: str) -> str:
     return FLAGS.get(country, "🏳️")
 
@@ -166,16 +232,17 @@ async def jogoshoje(interaction: discord.Interaction):
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
 @tree.command(name="proximojogo", description="Próximo jogo de um time na Copa do Mundo 2026")
-@app_commands.describe(time="Nome do time em inglês. Ex: Brazil, France, Mexico")
+@app_commands.describe(time="Nome do time em português ou inglês. Ex: Brasil, França, Mexico")
 async def proximojogo(interaction: discord.Interaction, time: str):
     await interaction.response.defer()
 
+    time = translate_team(time)
     event = await find_next_event(time)
 
     if not event:
         await interaction.followup.send(
             f"❌ Nenhum jogo futuro encontrado para **{time}**.\n"
-            f"💡 Use o nome em inglês. Ex: `Brazil`, `France`, `United States`"
+            f"💡 Tente o nome em português ou inglês. Ex: `Brasil`, `França`, `Mexico`"
         )
         return
 
@@ -210,13 +277,14 @@ async def proximojogo(interaction: discord.Interaction, time: str):
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
 @tree.command(name="placar", description="Placares ao vivo ou de um time específico")
-@app_commands.describe(time="Nome do time (opcional). Ex: Brazil, France")
+@app_commands.describe(time="Nome do time em português ou inglês (opcional). Ex: Brasil, França")
 async def placar(interaction: discord.Interaction, time: str = None):
     await interaction.response.defer()
 
     events = await get_all_events()
 
     if time:
+        time  = translate_team(time)
         tl    = time.lower()
         jogos = [
             e for e in events
@@ -278,10 +346,11 @@ async def placar(interaction: discord.Interaction, time: str = None):
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
 @tree.command(name="informacoes", description="Informações e elenco de um time na Copa 2026")
-@app_commands.describe(time="Nome do time em inglês. Ex: Brazil, France, Mexico")
+@app_commands.describe(time="Nome do time em português ou inglês. Ex: Brasil, França, Mexico")
 async def informacoes(interaction: discord.Interaction, time: str):
     await interaction.response.defer()
 
+    time = translate_team(time)
     teams_data = await espn_get(TEAM_URL, {"limit": 100})
     teams      = teams_data.get("sports", [{}])[0].get("leagues", [{}])[0].get("teams", [])
 
@@ -295,7 +364,7 @@ async def informacoes(interaction: discord.Interaction, time: str):
     if not team_obj:
         await interaction.followup.send(
             f"❌ Time **{time}** não encontrado.\n"
-            f"💡 Use o nome em inglês. Ex: `Brazil`, `France`, `United States`"
+            f"💡 Tente o nome em português ou inglês. Ex: `Brasil`, `França`, `Mexico`"
         )
         return
 
@@ -333,10 +402,10 @@ async def informacoes(interaction: discord.Interaction, time: str):
     if athletes:
         grupos = {"Goleiro": [], "Defensor/Zagueiro": [], "Meio-campo": [], "Atacante": []}
         pos_map = {
-            "Goalkeeper": "Goleiro", "GK": "Goleiro",
-            "Defender": "Defensor/Zagueiro", "DF": "Defensor/Zagueiro",
-            "Midfielder": "Meio-campo", "MF": "Meio-campo",
-            "Forward": "Atacante", "FW": "Atacante",
+            "Goalkeeper": "Goleiro", "G": "Goleiro", "GK": "Goleiro",
+            "Defender": "Defensor/Zagueiro", "D": "Defensor/Zagueiro", "DF": "Defensor/Zagueiro",
+            "Midfielder": "Meio-campo", "M": "Meio-campo", "MF": "Meio-campo",
+            "Forward": "Atacante", "F": "Atacante", "FW": "Atacante",
         }
 
         for a in athletes:
