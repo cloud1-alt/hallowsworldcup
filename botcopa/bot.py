@@ -94,7 +94,6 @@ def format_goals(comp: dict) -> str | None:
     home_id   = home_team["id"]
     home_name = home_team["displayName"]
     away_name = away_team["displayName"]
-    # Sigla vem direto da ESPN, então funciona mesmo pra times fora do dict FLAGS
     home_abbr = home_team.get("abbreviation") or home_name[:3].upper()
     away_abbr = away_team.get("abbreviation") or away_name[:3].upper()
 
@@ -117,17 +116,6 @@ def format_goals(comp: dict) -> str | None:
         linhas.append(f"{flag(time_nome)} **{abbr}** {nome}{sufixo} {minuto}")
 
     return "\n".join(linhas)
-
-# ─── Decorators reutilizáveis ─────────────────────────────────────────────────
-
-def global_command(name, description):
-    def decorator(func):
-        func = app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)(func)
-        func = app_commands.allowed_installs(guilds=True, users=True)(func)
-        func = tree.command(name=name, description=description)(func)
-        return func
-    return decorator
-
 
 # ─── /jogoshoje ───────────────────────────────────────────────────────────────
 
@@ -243,7 +231,6 @@ async def placar(interaction: discord.Interaction, time: str = None):
         await interaction.followup.send(msg)
         return
 
-    # Título e cor dependem do estado real dos jogos encontrados, não fica fixo em "Ao Vivo"
     estados = {e["status"]["type"]["state"] for e in jogos}
     if "in" in estados:
         titulo, cor = "🔴 Ao Vivo — Copa do Mundo 2026", 0xCC0000
@@ -295,7 +282,6 @@ async def placar(interaction: discord.Interaction, time: str = None):
 async def informacoes(interaction: discord.Interaction, time: str):
     await interaction.response.defer()
 
-    # 1. Busca o time na API
     teams_data = await espn_get(TEAM_URL, {"limit": 100})
     teams      = teams_data.get("sports", [{}])[0].get("leagues", [{}])[0].get("teams", [])
 
@@ -316,11 +302,9 @@ async def informacoes(interaction: discord.Interaction, time: str):
     team_id   = team_obj["id"]
     team_name = team_obj["displayName"]
 
-    # 2. Busca detalhes do time (elenco)
     detail = await espn_get(f"{TEAM_URL}/{team_id}/roster")
     athletes = detail.get("athletes", [])
 
-    # 3. Busca próximo jogo
     event    = await find_next_event(team_name)
     oponente = "—"
     data_jogo = "—"
@@ -334,13 +318,11 @@ async def informacoes(interaction: discord.Interaction, time: str):
         data_jogo = fmt_date(event["date"])
         fase      = (comp.get("notes") or [{}])[0].get("headline", "Fase de Grupos")
 
-    # 4. Monta embed principal
     embed = discord.Embed(
         title=f"{flag(team_name)} {team_name} — Copa do Mundo 2026",
         color=0x004D40,
     )
 
-    # Próximo jogo
     if event:
         embed.add_field(
             name="📅 Próximo Jogo",
@@ -348,7 +330,6 @@ async def informacoes(interaction: discord.Interaction, time: str):
             inline=False,
         )
 
-    # Elenco por posição
     if athletes:
         grupos = {"Goleiro": [], "Defensor/Zagueiro": [], "Meio-campo": [], "Atacante": []}
         pos_map = {
@@ -373,7 +354,7 @@ async def informacoes(interaction: discord.Interaction, time: str):
             if jogadores:
                 embed.add_field(
                     name=f"{emojis[pos]} {pos}",
-                    value="\n".join(jogadores[:8]),  # Limite pra não estourar embed
+                    value="\n".join(jogadores[:8]),
                     inline=True,
                 )
     else:
@@ -398,9 +379,8 @@ async def classificacao(interaction: discord.Interaction, grupo: str = None):
 
     data = await espn_get(STANDINGS_URL)
 
-    try:
-        groups = data["standings"]
-    except (KeyError, TypeError):
+    groups = data.get("children", [])
+    if not groups:
         await interaction.followup.send("❌ Classificação não disponível ainda. Começa dia 11/06!")
         return
 
@@ -412,8 +392,10 @@ async def classificacao(interaction: discord.Interaction, grupo: str = None):
         if grupo and not group_name.upper().endswith(grupo.upper()):
             continue
 
+        entries = group.get("standings", {}).get("entries", [])
+
         lines = []
-        for i, entry in enumerate(group.get("standings", []), 1):
+        for i, entry in enumerate(entries, 1):
             name  = entry["team"]["displayName"]
             stats = {s["name"]: s["displayValue"] for s in entry.get("stats", [])}
             pts   = stats.get("points", "0")
