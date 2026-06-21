@@ -136,6 +136,50 @@ def translate_team(team_name: str) -> str:
     chave = normalize(team_name)
     return TEAM_PT_EN.get(chave, team_name)
 
+# Dicionário reverso (inglês -> português) usado só para EXIBIÇÃO dos nomes
+# nos embeds. Inclui também placeholders de mata-mata que a ESPN usa antes
+# dos confrontos serem definidos (ex.: "Round of 32 1 Winner").
+TEAM_EN_PT = {
+    "Brazil": "Brasil", "Argentina": "Argentina", "France": "França",
+    "Germany": "Alemanha", "Spain": "Espanha", "England": "Inglaterra",
+    "Portugal": "Portugal", "Netherlands": "Holanda", "Italy": "Itália",
+    "Uruguay": "Uruguai", "Mexico": "México", "United States": "Estados Unidos",
+    "Japan": "Japão", "Morocco": "Marrocos", "Croatia": "Croácia",
+    "Serbia": "Sérvia", "Switzerland": "Suíça", "Senegal": "Senegal",
+    "Australia": "Austrália", "Iran": "Irã", "South Korea": "Coreia do Sul",
+    "Ghana": "Gana", "Cameroon": "Camarões", "Canada": "Canadá",
+    "Ecuador": "Equador", "Qatar": "Catar", "Saudi Arabia": "Arábia Saudita",
+    "Tunisia": "Tunísia", "Colombia": "Colômbia", "Chile": "Chile",
+    "Peru": "Peru", "Venezuela": "Venezuela", "Poland": "Polônia",
+    "Denmark": "Dinamarca", "Belgium": "Bélgica", "Wales": "País de Gales",
+    "Costa Rica": "Costa Rica", "New Zealand": "Nova Zelândia",
+    "South Africa": "África do Sul", "Czech Republic": "Tchéquia",
+    "Czechia": "Tchéquia", "Paraguay": "Paraguai",
+    "Bosnia and Herzegovina": "Bósnia e Herzegovina", "Bosnia-Herzegovina": "Bósnia e Herzegovina",
+    "Scotland": "Escócia", "Norway": "Noruega", "Austria": "Áustria",
+    "Iraq": "Iraque", "Algeria": "Argélia", "Jordan": "Jordânia",
+    "Uzbekistan": "Uzbequistão", "Egypt": "Egito", "Panama": "Panamá",
+    "Congo DR": "RD Congo", "DR Congo": "RD Congo", "Haiti": "Haiti",
+    "Curaçao": "Curaçao", "Curacao": "Curaçao", "Cape Verde": "Cabo Verde",
+    "Sweden": "Suécia", "Ivory Coast": "Costa do Marfim", "Türkiye": "Turquia",
+    "Turkey": "Turquia",
+    # Placeholders de fases eliminatórias (confronto ainda não definido)
+    "Winner": "Vencedor", "2nd Place": "2º Colocado",
+}
+
+def pt_name(name: str) -> str:
+    """Traduz o nome de um país/time (vindo em inglês da ESPN) para PT-BR.
+    Se não encontrar mapeamento exato, tenta trocar pedaços conhecidos
+    (útil para placeholders tipo 'Group A 2nd Place' ou 'Round of 32 1
+    Winner'); na pior das hipóteses devolve o nome original sem quebrar."""
+    if name in TEAM_EN_PT:
+        return TEAM_EN_PT[name]
+    traduzido = name
+    for en, pt in sorted(TEAM_EN_PT.items(), key=lambda kv: -len(kv[0])):
+        if en in traduzido:
+            traduzido = traduzido.replace(en, pt)
+    return traduzido
+
 def flag(country: str) -> str:
     return FLAGS.get(country, "🏳️")
 
@@ -221,7 +265,7 @@ async def jogoshoje(interaction: discord.Interaction):
             placar = f"🔴 **{home_score} — {away_score}**  •  {clock}"
 
         embed.add_field(
-            name=f"{flag(home)} {home} vs {away} {flag(away)}",
+            name=f"{flag(home)} {pt_name(home)} vs {pt_name(away)} {flag(away)}",
             value=placar, inline=False,
         )
 
@@ -258,12 +302,12 @@ async def proximojogo(interaction: discord.Interaction, time: str):
     note    = (comp.get("notes") or [{}])[0].get("headline", "Fase de Grupos")
 
     embed = discord.Embed(
-        title=f"📅 Próximo Jogo — {flag(home)} {home}",
+        title=f"📅 Próximo Jogo — {flag(home)} {pt_name(home)}",
         color=0x1565C0,
     )
     embed.add_field(
         name="⚽ Confronto",
-        value=f"{flag(home)} **{home}** vs **{away}** {flag(away)}",
+        value=f"{flag(home)} **{pt_name(home)}** vs **{pt_name(away)}** {flag(away)}",
         inline=False,
     )
     embed.add_field(name="🗓️ Data e Hora", value=date,    inline=True)
@@ -331,7 +375,7 @@ async def placar(interaction: discord.Interaction, time: str = None):
             valor      = f"{prefixo}**{home_score} — {away_score}**  •  ⏱️ {clock} ({descricao})"
 
         embed.add_field(
-            name=f"{flag(home)} {home} vs {away} {flag(away)}",
+            name=f"{flag(home)} {pt_name(home)} vs {pt_name(away)} {flag(away)}",
             value=valor,
             inline=False,
         )
@@ -390,14 +434,14 @@ async def informacoes(interaction: discord.Interaction, time: str):
         fase      = (comp.get("notes") or [{}])[0].get("headline", "Fase de Grupos")
 
     embed = discord.Embed(
-        title=f"{flag(team_name)} {team_name} — Copa do Mundo 2026",
+        title=f"{flag(team_name)} {pt_name(team_name)} — Copa do Mundo 2026",
         color=0x004D40,
     )
 
     if event:
         embed.add_field(
             name="📅 Próximo Jogo",
-            value=f"vs {flag(oponente)} **{oponente}**\n{data_jogo}\n{fase}",
+            value=f"vs {flag(oponente)} **{pt_name(oponente)}**\n{data_jogo}\n{fase}",
             inline=False,
         )
 
@@ -520,7 +564,7 @@ async def proximosjogos(interaction: discord.Interaction):
         note  = (comp.get("notes") or [{}])[0].get("headline", "Fase de Grupos")
 
         embed.add_field(
-            name=f"{flag(home)} {home} vs {away} {flag(away)}",
+            name=f"{flag(home)} {pt_name(home)} vs {pt_name(away)} {flag(away)}",
             value=f"🕐 {date}  •  {note}",
             inline=False,
         )
@@ -560,7 +604,7 @@ async def historico(interaction: discord.Interaction):
         status_desc = event["status"]["type"]["description"]
 
         embed.add_field(
-            name=f"{flag(home)} {home} vs {away} {flag(away)}",
+            name=f"{flag(home)} {pt_name(home)} vs {pt_name(away)} {flag(away)}",
             value=f"**{home_score} — {away_score}**  •  {status_desc}",
             inline=False,
         )
